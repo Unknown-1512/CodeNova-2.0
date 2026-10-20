@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+{% block content %}
+{% set mode = selected_mode or (result.mode if result else 'text') %}
+<main class="page">
+
+  <section class="hero">
+    <h1>Detect Scam Messages, Screenshots &amp; Hidden QR Traps</h1>
+    <p>Choose <b>Text Message</b> or <b>Image / Screenshot</b> input below. Every scan runs directly through our pure <b>Python forensic engine (scikit-learn TF-IDF ensemble + Tesseract OCR + PyZbar QR decoder)</b> to compute an exact spam percentage and explain every suspicious phrase.</p>
+  </section>
+
+  <section class="stats">
+    <div class="stat">
+      <div class="stat-top"><span>Total Scans Analysed</span>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#2563eb" stroke-width="2"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div>
+      <div class="stat-val">{{ stats.total }}</div>
+      <div class="stat-sub">{{ stats.text }} Text * {{ stats.image }} Image OCR</div>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>Scam Threats Flagged</span>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#dc2626" stroke-width="2"><path d="M12 2l8 3v6c0 5-3.4 9.2-8 11-4.6-1.8-8-6-8-11V5z"/><path d="M12 8v4M12 16h.01"/></svg></div>
+      <div class="stat-val red">{{ stats.flagged }}</div>
+      <div class="stat-sub">Spam probability ≥ 50.0%</div>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>Mean Spam Score</span>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#f97316" stroke-width="2"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg></div>
+      <div class="stat-val">{{ stats.mean }}%</div>
+      <div class="stat-sub">Across stored scan corpus</div>
+    </div>
+    <div class="stat">
+      <div class="stat-top"><span>Verified Safe Messages</span>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#16a34a" stroke-width="2"><path d="M12 2l8 3v6c0 5-3.4 9.2-8 11-4.6-1.8-8-6-8-11V5z"/><path d="M9 12l2 2 4-4"/></svg></div>
+      <div class="stat-val green">{{ stats.safe }}</div>
+      <div class="stat-sub">Clean conversational &amp; 2FA notices</div>
+    </div>
+  </section>
+
+  <section class="grid">
+
+    <!-- ============ LEFT: INPUT ============ -->
+    <form class="card input-card" method="post" action="{{ url_for('scan') }}" enctype="multipart/form-data" id="scanForm">
+      <div class="step-head">
+        <span>Step 1 • Choose input format</span>
+        <span class="tip">Tip: Paste screenshots anywhere (Ctrl+V)</span>
+      </div>
+
+      <div class="modes">
+        <label class="mode">
+          <input type="radio" name="mode" value="text" {{ 'checked' if mode == 'text' }}>
+          <div class="mode-box">
+            <span class="mode-icon blue">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/></svg>
+            </span>
+            <span class="tick"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="10" fill="#2563eb"/><path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="#fff" stroke-width="2"/></svg></span>
+            <b>Text Message</b>
+            <small>SMS, email body, WhatsApp, or DM text</small>
+          </div>
+        </label>
+        <label class="mode">
+          <input type="radio" name="mode" value="image" {{ 'checked' if mode == 'image' }}>
+          <div class="mode-box">
+            <span class="mode-icon gray">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#64748b" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+            </span>
+            <span class="tick"><svg viewBox="0 0 24 24" width="16" height="16"><circle cx="12" cy="12" r="10" fill="#2563eb"/><path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="#fff" stroke-width="2"/></svg></span>
+            <b>Image / Screenshot</b>
+            <small>Chat screenshot, QR card, or invoice photo</small>
+          </div>
+        </label>
+      </div>
+
+      {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+      <div class="step-head second">
+        <span>Step 2 • <span id="step2Label">{{ 'Upload screenshot / QR image (or try a sample)' if mode == 'image' else 'Paste message content' }}</span></span>
+        <a href="#" id="clearBtn" class="clear">Clear text</a>
+      </div>
+
+      <div id="textPane">
+        <textarea name="message" id="message" rows="7" placeholder="Paste the suspicious SMS, email, WhatsApp or DM text here…">{{ request.form.get('message', '') }}</textarea>
+      </div>
+      <div id="imagePane">
+        <input type="hidden" name="sample" id="sampleField" value="">
+        <input type="file" name="image" id="imageInput" accept="image/png,image/jpeg,image/webp,image/*" hidden>
+
+        <div class="drop" id="dropZone" tabindex="0">
+          <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#2563eb" stroke-width="1.8"><path d="M7 18a4 4 0 0 1-.6-7.96A6 6 0 0 1 18 9a4.5 4.5 0 0 1-.5 9H7z"/><path d="M12 12v6M9.5 14.5L12 12l2.5 2.5"/></svg>
+          <b>Drop message image here or <a href="#" id="browseLink">browse file</a></b>
+          <small>Supports PNG, JPG, WEBP screenshots (light or dark mode) &amp; QR codes up to 10 MB</small>
+        </div>
+
+        <div class="preview" id="previewBox" hidden>
+          <div class="preview-head"><span id="previewName">Selected file</span><a href="#" id="previewClear">✕ Clear</a></div>
+          <img id="previewImg" alt="Selected screenshot preview">
+        </div>
+
+        <div class="sample-title">Or test instant Python OCR + QR extraction on real screenshots:</div>
+        <div class="samples">
+          {% for s in samples %}
+          <button type="button" class="sample-btn" data-id="{{ s.id }}" data-file="{{ s.file }}" data-src="{{ url_for('static', filename='samples/' ~ s.file) }}">
+            <b>{{ s.label }}</b>
+            <span class="{{ s.kind }}">{{ s.sub }}</span>
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <input type="text" name="context" id="contextPane" class="label-input" maxlength="200" placeholder="Optional context (e.g., 'Sent from unknown WhatsApp number')" value="{{ request.form.get('context', '') }}">
+
+      <div class="quick" id="quickPane">
+        <div class="quick-title">Quick-Fill Test Messages:</div>
+        {% for q in quick_fills %}
+        <button type="button" class="quick-btn" data-text="{{ q.text }}">
+          <span>{{ q.label }}</span>
+          <em class="tag {{ q.kind }}">{{ 'Scam Test' if q.kind == 'scam' else 'Safe Test' }}</em>
+        </button>
+        {% endfor %}
+      </div>
+
+      <input type="text" name="label" class="label-input" maxlength="80" placeholder="Optional report label for dashboard log…" value="{{ request.form.get('label', '') }}">
+
+      <button type="submit" class="cta">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/></svg>
+        <span id="ctaText">Calculate Spam Percentage with Python</span>
+      </button>
+    </form>
+
+    <!-- ============ RIGHT: RESULTS ============ -->
+    <div class="results" id="results">
+      {% if result %}
+      <div class="card head-card">
+        <div class="head-left">
+          <div class="head-badges">
+            <span class="risk risk-{{ result.risk_class }}">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 2l8 3v6c0 5-3.4 9.2-8 11-4.6-1.8-8-6-8-11V5z"/><path d="M12 8v4M12 16h.01"/></svg>
+              {{ result.risk }}</span>
+            <span class="badge-soft">{{ 'Direct Text Scan' if result.mode == 'text' else 'Image OCR Scan' }}</span>
+          </div>
+          <h2>{{ result.title }}</h2>
+          <div class="classif">Classification: <b>{{ result.category }}</b> <span class="muted">• {{ result.created }}</span></div>
+          {% if result.context %}<div class="classif">Context: <i>{{ result.context }}</i></div>{% endif %}
+        </div>
+        <div class="engine mono">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#2563eb" stroke-width="2"><path d="M12 2l8 3v6c0 5-3.4 9.2-8 11-4.6-1.8-8-6-8-11V5z"/></svg>
+          <div>Python {{ py_version }} Engine<br><span>{{ result.latency_ms }} ms latency</span></div>
+        </div>
+      </div>
+
+      <div class="card gauge-card">
+        <div class="gauge-wrap">
+          {% set col = {'critical':'#dc2626','high':'#f97316','medium':'#eab308','safe':'#16a34a'}[result.risk_class] %}
+          <svg viewBox="0 0 220 130" class="gauge">
+            <path d="M25 110 A85 85 0 0 1 195 110" pathLength="100" fill="none" stroke="#e5e7eb" stroke-width="18" stroke-linecap="round"/>
+            <path d="M25 110 A85 85 0 0 1 195 110" pathLength="100" fill="none" stroke="{{ col }}" stroke-width="18" stroke-linecap="round" stroke-dasharray="{{ result.score }} 100"/>
+            <text x="110" y="12" text-anchor="middle" class="g-lbl">50%</text>
+            <text x="22" y="128" text-anchor="middle" class="g-lbl">0%</text>
+            <text x="198" y="128" text-anchor="middle" class="g-lbl">100%</text>
+            <text x="110" y="92" text-anchor="middle" class="g-num" fill="{{ col }}">{{ result.score }}%</text>
+            <text x="110" y="112" text-anchor="middle" class="g-sub">SPAM / SCAM PROBABILITY</text>
+          </svg>
+          <div class="g-verdict" style="color: {{ col }}">
+            {% if result.risk_class == 'critical' %}High-Probability Scam / Spam Detected
+            {% elif result.risk_class == 'high' %}Likely Scam / Spam Detected
+            {% elif result.risk_class == 'medium' %}Suspicious - Review Carefully
+            {% else %}Message Looks Safe{% endif %}
+          </div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><span>Python ML Classifier</span><b>{{ result.ml }}%</b><small>TF-IDF Word/Char-gram Ensemble</small></div>
+          <div class="metric"><span>Linguistic &amp; URL Rules</span><b>{{ result.rules }}%</b><small>{{ result.red_flags }} red-flag phrase(s) &amp; {{ result.links }} link(s)</small></div>
+          <div class="metric"><span><i class="dot blue"></i>Verdict Confidence</span><b>{{ result.confidence }}%</b><small>Calibrated dual-model agreement</small></div>
+          <div class="metric"><span><i class="dot green"></i>Scanned Tokens</span><b>{{ result.tokens }} words</b><small>Full character-span analysis</small></div>
+        </div>
+      </div>
+
+      <div class="card summary-card">
+        <h3 class="sec-title"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#2563eb" stroke-width="2"><path d="M4 7l5 5-5 5M12 18h8"/></svg> Python Forensic Summary — Why This Score Was Assigned</h3>
+        <p>{{ result.summary }}</p>
+        {% for w in result.warnings or [] %}<p class="warn">⚠ {{ w }}</p>{% endfor %}
+      </div>
+
+      <div class="card trig-card">
+        <div class="trig-head">
+          <h3 class="sec-title"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#2563eb" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg> Analyzed Message Content &amp; Highlighted Spam Triggers</h3>
+          <div class="legend"><span class="lg-chip critical">Critical Trigger</span><span class="lg-chip high">High Risk</span><span class="lg-chip medium">Medium Flag</span></div>
+        </div>
+        <div class="hl-box">{{ result.highlighted | safe }}</div>
+
+      </div>
+
+      <div class="card detail-card">
+        <h3 class="sec-title"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#2563eb" stroke-width="2"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>
+          Detailed Description of Suspicious / Spam Content ({{ result.triggers|length }} Clause{{ '' if result.triggers|length == 1 else 's' }} Identified)</h3>
+        <div class="clauses">
+          {% for t in result.triggers %}
+          <div class="clause sev-{{ t.severity }}">
+            <div class="clause-num">{{ loop.index }}</div>
+            <div class="clause-body">
+              <div class="clause-top"><b>{{ t.name }}</b>
+                <span class="sev-pill {{ t.severity }}">{{ 'Critical Trigger' if t.severity == 'critical' else ('High Risk' if t.severity == 'high' else 'Medium Flag') }}</span></div>
+              <div class="phr">{% for p in t.phrases %}<code>{{ p }}</code>{% endfor %}</div>
+              <p>{{ t.why }}</p>
+            </div>
+          </div>
+          {% else %}
+          <p class="muted">No suspicious clauses were found in this message.</p>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% if result.mode == 'image' %}
+      <div class="card extract-card">
+        <h3 class="sec-title"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#2563eb" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg> Image Extraction — What Python Read From The Picture</h3>
+        <div class="extract-grid">
+          {% if result.image_url %}<img src="{{ result.image_url }}" alt="Scanned image" class="extract-img">{% endif %}
+          <div>
+            <div class="ex-meta"><span class="badge-soft">{{ result.engine or 'No OCR engine' }}</span>
+              <span class="badge-soft">{{ result.qr|length }} QR code(s) decoded</span></div>
+            {% if result.qr %}
+              <div class="ex-label">Hidden QR destination</div>
+              {% for q in result.qr %}<code class="qr-code">{{ q }}</code>{% endfor %}
+            {% endif %}
+            <div class="ex-label">OCR text</div>
+            <pre class="ocr-text">{{ result.extracted_text or '(no readable text found)' }}</pre>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% else %}
+      <div class="card empty">
+        <svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="#94a3b8" stroke-width="1.5"><path d="M12 2l8 3v6c0 5-3.4 9.2-8 11-4.6-1.8-8-6-8-11V5z"/><path d="M9 12l2 2 4-4"/></svg>
+        <h3>Your forensic report will appear here</h3>
+        <p>Pick an input format, add a message or screenshot, then press <b>Calculate Spam Percentage with Python</b>.</p>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  var textPane = document.getElementById('textPane');
+  var imagePane = document.getElementById('imagePane');
+  var quickPane = document.getElementById('quickPane');
+  var label = document.getElementById('step2Label');
+  var clearBtn = document.getElementById('clearBtn');
+  var msg = document.getElementById('message');
+  var fileInput = document.getElementById('imageInput');
+  var sampleField = document.getElementById('sampleField');
+  var dropZone = document.getElementById('dropZone');
+  var previewBox = document.getElementById('previewBox');
+  var previewImg = document.getElementById('previewImg');
+  var previewName = document.getElementById('previewName');
+  var sampleBtns = document.querySelectorAll('.sample-btn');
+
+  function currentMode() { return document.querySelector('input[name=mode]:checked').value; }
+
+  function sync() {
+    var m = currentMode();
+    textPane.style.display = quickPane.style.display = (m === 'text') ? '' : 'none';
+    imagePane.style.display = (m === 'image') ? '' : 'none';
+    document.getElementById('contextPane').style.display = (m === 'image') ? '' : 'none';
+    document.getElementById('ctaText').textContent = m === 'image' ? 'Analyze Image with Python OCR Engine' : 'Calculate Spam Percentage with Python';
+    label.textContent = m === 'text' ? 'Paste message content' : 'Upload screenshot / QR image (or try a sample)';
+    clearBtn.textContent = m === 'text' ? 'Clear text' : 'Clear image';
+    document.querySelectorAll('.mode').forEach(function (el) {
+      el.classList.toggle('on', el.querySelector('input').checked);
+    });
+  }
+  document.querySelectorAll('input[name=mode]').forEach(function (r) { r.addEventListener('change', sync); });
+
+  function setMode(m) { document.querySelector('input[name=mode][value=' + m + ']').checked = true; sync(); }
+
+  function showPreview(src, name) {
+    previewImg.src = src;
+    previewName.textContent = name;
+    previewBox.hidden = false;
+  }
+  function clearImage() {
+    fileInput.value = ''; sampleField.value = '';
+    previewBox.hidden = true; previewImg.removeAttribute('src');
+    sampleBtns.forEach(function (b) { b.classList.remove('on'); });
+  }
+
+  function useFile(file) {
+    if (!file) return;
+    sampleField.value = '';
+    sampleBtns.forEach(function (b) { b.classList.remove('on'); });
+    var dt = new DataTransfer(); dt.items.add(file); fileInput.files = dt.files;
+    setMode('image');
+    showPreview(URL.createObjectURL(file), 'Selected file: ' + (file.name || 'pasted-screenshot.png'));
+  }
+
+  /* quick-fill text samples */
+  document.querySelectorAll('.quick-btn').forEach(function (b) {
+    b.addEventListener('click', function () { setMode('text'); msg.value = b.dataset.text; });
+  });
+
+  /* built-in sample screenshots */
+  sampleBtns.forEach(function (b) {
+    b.addEventListener('click', function () {
+      fileInput.value = '';
+      sampleField.value = b.dataset.id;
+      sampleBtns.forEach(function (x) { x.classList.toggle('on', x === b); });
+      setMode('image');
+      showPreview(b.dataset.src, 'Selected Sample: ' + b.dataset.file);
+    });
+  });
+
+  /* browse / click / drag & drop */
+  document.getElementById('browseLink').addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); fileInput.click(); });
+  dropZone.addEventListener('click', function () { fileInput.click(); });
+  dropZone.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+  fileInput.addEventListener('change', function () { useFile(fileInput.files[0]); });
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    dropZone.addEventListener(ev, function (e) { e.preventDefault(); dropZone.classList.add('over'); });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    dropZone.addEventListener(ev, function (e) { e.preventDefault(); dropZone.classList.remove('over'); });
+  });
+  dropZone.addEventListener('drop', function (e) {
+    var f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f && f.type.indexOf('image') === 0) useFile(f);
+  });
+  document.getElementById('previewClear').addEventListener('click', function (e) { e.preventDefault(); clearImage(); });
+
+  clearBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    if (currentMode() === 'text') { msg.value = ''; } else { clearImage(); }
+  });
+
+  /* Ctrl+V anywhere: pasted screenshots go straight to image mode */
+  document.addEventListener('paste', function (e) {
+    var items = (e.clipboardData || {}).items || [];
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') === 0) { useFile(items[i].getAsFile()); e.preventDefault(); return; }
+    }
+  });
+
+  sync();
+})();
+</script>
+{% endblock %}

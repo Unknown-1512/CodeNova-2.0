@@ -1,0 +1,8 @@
+flask>=3.0
+scikit-learn>=1.4
+pillow>=10.0
+numpy
+opencv-python-headless>=4.9      # QR decoding - pip only, no system install
+rapidocr-onnxruntime>=1.3        # OCR - pip only, no system install (recommended on Windows)
+pytesseract>=0.3.10              # optional: used automatically if Tesseract is installed
+pyzbar>=0.1.9                    # optional extra QR decoder

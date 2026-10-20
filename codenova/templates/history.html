@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<main class="page">
+  <section class="hero">
+    <h1>Scan History</h1>
+    <p>Every scan stored by the CodeNova 2.0 Python engine. Open a row to see the full forensic report.</p>
+  </section>
+
+  <div class="card hist-card">
+    {% if rows %}
+    <table class="hist">
+      <thead><tr><th>#</th><th>Message</th><th>Input</th><th>Classification</th><th>Spam %</th><th>Verdict</th><th>Scanned</th><th></th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td class="muted">{{ r.id }}</td>
+          <td><a href="{{ url_for('view_scan', scan_id=r.id) }}#results">{{ r.title }}</a></td>
+          <td>{{ 'Text' if r.mode == 'text' else 'Image OCR' }}</td>
+          <td>{{ r.category }}</td>
+          <td><b>{{ r.score }}%</b></td>
+          <td><span class="risk risk-{{ r.risk_class }}">{{ {'critical':'Critical','high':'High','medium':'Suspicious','safe':'Safe'}[r.risk_class] }}</span></td>
+          <td class="muted">{{ r.created }}</td>
+          <td><form method="post" action="{{ url_for('delete_scan', scan_id=r.id) }}"><button class="del" title="Delete scan">✕</button></form></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty"><h3>No scans yet</h3><p>Run your first scan from the <a href="{{ url_for('index') }}">Scanner</a>.</p></div>
+    {% endif %}
+  </div>
+</main>
+{% endblock %}
